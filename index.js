@@ -8,12 +8,11 @@ import companyRoute from "./routes/company.route.js";
 import jobRoute from "./routes/job.route.js";
 import applicationRoute from "./routes/application.route.js";
 import { setupSwagger } from "./utils/swagger.js";
-import path from "path";
 
 dotenv.config({});
 const app = express();
 
-//middleware
+// ── Core middleware ───────────────────────────────────────────────────────────
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -30,35 +29,19 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// ── API Documentation ─────────────────────────────────────────────────────────
-// Only expose Swagger UI in non-production environments (or always, your call)
-if (process.env.NODE_ENV !== "production") {
-  setupSwagger(app);
-}
+// ── API Documentation (available in all environments) ────────────────────────
+setupSwagger(app);
 
-const PORT = process.env.PORT || 5001;
-
- 
-//api's
-
+// ── Routes ────────────────────────────────────────────────────────────────────
 app.use("/api/user", userRoute);
 app.use("/api/company", companyRoute);
 app.use("/api/job", jobRoute);
 app.use("/api/application", applicationRoute);
 
-
-// ----------Code for deployment--------------
-
-if (process.env.NODE_ENV === "production") {
- const dirpath = path.resolve();
- app.use(express.static('./Frontend/dist'));
- app.get('*', (req, res) => {
-   res.sendFile(path.resolve(dirpath, './Frontend/dist', 'index.html'));
- });
-   
-}
+// ── Start server ──────────────────────────────────────────────────────────────
+const PORT = process.env.PORT || 5001;
 
 app.listen(PORT, () => {
   connectDB();
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
