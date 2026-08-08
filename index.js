@@ -32,6 +32,10 @@ app.use(cors(corsOptions));
 // ── API Documentation (available in all environments) ────────────────────────
 setupSwagger(app);
 
+app.get('/', (req, res) => {
+    res.send('Job-Hunt — API docs available at /api-docs');
+});
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use("/api/user", userRoute);
 app.use("/api/company", companyRoute);
