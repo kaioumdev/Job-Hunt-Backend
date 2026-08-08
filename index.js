@@ -17,9 +17,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-const allowedOrigins = ["https://job-hunt-frontend-nu.vercel.app","http://localhost:5173","http://localhost:5174"]
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+const allowedOrigins = [
+  "https://job-hunt-frontend-nu.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:5174",
+];
 
 const corsOptions = {
   origin: allowedOrigins,
@@ -28,11 +30,12 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// ── API Documentation (available in all environments) ────────────────────────
+// ── API Documentation ─────────────────────────────────────────────────────────
 setupSwagger(app);
 
-app.get('/', (req, res) => {
-    res.send('Job-Hunt — API docs available at /api-docs');
+// Health check
+app.get("/", (_req, res) => {
+  res.json({ message: "Job-Hunt API is running.", docs: "/api-docs" });
 });
 
 // ── Routes ────────────────────────────────────────────────────────────────────
