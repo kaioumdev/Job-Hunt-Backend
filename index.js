@@ -17,8 +17,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-const allowedOrigins = (process.env.CORS_ORIGIN || "")
-  .split(",")
+const allowedOrigins = ["https://job-hunt-frontend-nu.vercel.app","http://localhost:5173","http://localhost:5174"]
   .map((origin) => origin.trim())
   .filter(Boolean);
 
