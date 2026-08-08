@@ -7,6 +7,7 @@ import userRoute from "./routes/user.route.js";
 import companyRoute from "./routes/company.route.js";
 import jobRoute from "./routes/job.route.js";
 import applicationRoute from "./routes/application.route.js";
+import { setupSwagger } from "./utils/swagger.js";
 import path from "path";
 
 dotenv.config({});
@@ -28,6 +29,12 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// ── API Documentation ─────────────────────────────────────────────────────────
+// Only expose Swagger UI in non-production environments (or always, your call)
+if (process.env.NODE_ENV !== "production") {
+  setupSwagger(app);
+}
 
 const PORT = process.env.PORT || 5001;
 
