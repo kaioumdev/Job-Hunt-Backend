@@ -47,7 +47,8 @@ app.use("/api/application", applicationRoute);
 // ── Start server ──────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5001;
 
+connectDB();
+
 app.listen(PORT, () => {
-  connectDB();
   console.log(`Server running on port ${PORT}`);
 });
