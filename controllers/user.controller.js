@@ -7,6 +7,16 @@ import { sendOtpEmail } from "../utils/mailer.js";
 
 // make a random 6 digit OTP as a string
 const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
+// Cookie options for cross-origin requests (Frontend on different Vercel domain).
+// SameSite=None + Secure=true is required for cookies to be sent cross-origin.
+// In development (http) secure must be false, so we toggle on NODE_ENV.
+const cookieOptions = {
+  maxAge: 24 * 60 * 60 * 1000, // 1 day
+  httpOnly: true,
+  sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
+  secure: process.env.NODE_ENV === 'production',
+};
+
 
 export const register = async (req, res) => {
   try {
@@ -154,11 +164,7 @@ export const verifyOtp = async (req, res) => {
 
     return res
       .status(200)
-      .cookie("token", token, {
-        maxAge: 1 * 24 * 60 * 60 * 1000,
-        httpOnly: true,
-        sameSite: "Strict",
-      })
+      .cookie("token", token, cookieOptions)
       .json({
         message: "Email verified successfully.",
         user: safeUser,
@@ -349,11 +355,7 @@ export const login = async (req, res) => {
 
     return res
       .status(200)
-      .cookie("token", token, {
-        maxAge: 1 * 24 * 60 * 60 * 1000,
-        httpOnly: true,
-        sameSite: "Strict",
-      })
+      .cookie("token", token, cookieOptions)
       .json({
         message: `Welcome back ${safeUser.fullname}`,
         user: safeUser,
@@ -370,7 +372,7 @@ export const login = async (req, res) => {
 
 export const logout = async (req, res) => {
   try {
-    return res.status(200).cookie("token", "", { maxAge: 0 }).json({
+    return res.status(200).cookie("token", "", { ...cookieOptions, maxAge: 0 }).json({
       message: "Logged out successfully.",
       success: true,
     });

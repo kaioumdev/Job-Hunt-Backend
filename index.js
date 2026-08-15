@@ -24,8 +24,14 @@ const allowedOrigins = [
 ];
 
 const corsOptions = {
-  origin: allowedOrigins,
-  credentials: true,
+  // Function form lets us allow requests with no Origin header (Postman, curl)
+  // while still blocking unknown browser origins.
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error("CORS: origin " + origin + " not allowed"));
+  },
+  credentials: true,       // required for cookies to be sent cross-origin
+  optionsSuccessStatus: 200, // some legacy browsers choke on 204
 };
 
 app.use(cors(corsOptions));
