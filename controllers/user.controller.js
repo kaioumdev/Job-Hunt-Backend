@@ -11,32 +11,47 @@ const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString()
 export const register = async (req, res) => {
   try {
     const { fullname, email, phoneNumber, password, role, termsAcceptedAt } = req.body;
-    console.log("fullname", fullname)
 
     if (!fullname || !email || !phoneNumber || !password || !role) {
-      return res.status(404).json({
+      return res.status(400).json({
         message: "Missing required fields",
         success: false,
       });
     }
+
+    // ── profile photo upload (optional) ──────────────────────────────────
     const file = req.file;
     let cloudResponse;
     if (file) {
-      const fileUri = getDataUri(file);
-      cloudResponse = await cloudinary.uploader.upload(fileUri.content);
+      try {
+        const fileUri = getDataUri(file);
+        cloudResponse = await cloudinary.uploader.upload(fileUri.content);
+      } catch (uploadError) {
+        console.error("Cloudinary upload failed:", uploadError.message);
+        // photo upload failure should not block registration
+      }
     }
 
-    const user = await User.findOne({ email });
-    if (user) {
+    // ── duplicate email check ─────────────────────────────────────────────
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
       return res.status(400).json({
         message: "Email already exists",
         success: false,
       });
     }
-    //convert passwords to hashes
+
+    // ── duplicate phone check ─────────────────────────────────────────────
+    const existingPhone = await User.findOne({ phoneNumber });
+    if (existingPhone) {
+      return res.status(400).json({
+        message: "Phone number already registered",
+        success: false,
+      });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // generate an OTP and keep it valid for 10 minutes
     const otp = generateOtp();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
@@ -46,25 +61,25 @@ export const register = async (req, res) => {
       phoneNumber,
       password: hashedPassword,
       role,
-      termsAcceptedAt,
+      termsAcceptedAt: termsAcceptedAt || null,
       isVerified: false,
       otp,
       otpExpiry,
-      profile:{
+      profile: {
         profilePhoto: cloudResponse?.secure_url || "",
-      }
+      },
     });
 
     await newUser.save();
 
-    // send the OTP email - if this fails, remove the user so they can retry
+    // ── send OTP — rollback user if email fails ───────────────────────────
     try {
       await sendOtpEmail(email, otp);
     } catch (mailError) {
-      console.error("Failed to send OTP email:", mailError);
+      console.error("OTP email failed:", mailError.message);
       await User.deleteOne({ _id: newUser._id });
       return res.status(500).json({
-        message: "Could not send verification email. Please try again.",
+        message: "Could not send verification email. Please check your email address and try again.",
         success: false,
       });
     }
@@ -75,8 +90,8 @@ export const register = async (req, res) => {
       success: true,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
+    console.error("Register error:", error.message, error.stack);
+    return res.status(500).json({
       message: "Server Error registering user",
       success: false,
     });
@@ -124,7 +139,7 @@ export const verifyOtp = async (req, res) => {
     await user.save();
 
     // log the user in right away so they don't have to login again
-    const token = await jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "1d",
     });
 
@@ -150,13 +165,12 @@ export const verifyOtp = async (req, res) => {
         success: true,
       });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server Error verifying OTP", success: false });
+    console.error("VerifyOTP error:", error.message);
+    return res.status(500).json({ message: "Server Error verifying OTP", success: false });
   }
 };
 
-// Send an OTP to reset the password (used by both "forgot password" and
-// the "change password" option in the profile).
+// Send an OTP to reset the password
 export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
@@ -185,8 +199,8 @@ export const forgotPassword = async (req, res) => {
       success: true,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server Error sending OTP", success: false });
+    console.error("ForgotPassword error:", error.message);
+    return res.status(500).json({ message: "Server Error sending OTP", success: false });
   }
 };
 
@@ -225,7 +239,7 @@ export const resetPassword = async (req, res) => {
     user.password = await bcrypt.hash(newPassword, 10);
     user.otp = undefined;
     user.otpExpiry = undefined;
-    user.isVerified = true; // a successful reset also confirms the email
+    user.isVerified = true;
     await user.save();
 
     return res.status(200).json({
@@ -233,8 +247,8 @@ export const resetPassword = async (req, res) => {
       success: true,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server Error resetting password", success: false });
+    console.error("ResetPassword error:", error.message);
+    return res.status(500).json({ message: "Server Error resetting password", success: false });
   }
 };
 
@@ -271,8 +285,8 @@ export const resendOtp = async (req, res) => {
       success: true,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server Error resending OTP", success: false });
+    console.error("ResendOTP error:", error.message);
+    return res.status(500).json({ message: "Server Error resending OTP", success: false });
   }
 };
 
@@ -281,11 +295,12 @@ export const login = async (req, res) => {
     const { email, password, role } = req.body;
 
     if (!email || !password || !role) {
-      return res.status(404).json({
+      return res.status(400).json({
         message: "Missing required fields",
         success: false,
       });
     }
+
     let user = await User.findOne({ email });
     if (!user) {
       return res.status(404).json({
@@ -293,22 +308,25 @@ export const login = async (req, res) => {
         success: false,
       });
     }
+
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(404).json({
+      return res.status(401).json({
         message: "Incorrect email or password",
         success: false,
       });
     }
+
     // block login until the email is verified via OTP
     if (!user.isVerified) {
       return res.status(403).json({
         message: "Please verify your email before logging in.",
         needVerification: true,
+        email: user.email,
         success: false,
       });
     }
-    //check role correctly or not
+
     if (user.role !== role) {
       return res.status(403).json({
         message: "You don't have the necessary role to access this resource",
@@ -316,15 +334,11 @@ export const login = async (req, res) => {
       });
     }
 
-    //generate token
-    const tokenData = {
-      userId: user._id,
-    };
-    const token = await jwt.sign(tokenData, process.env.JWT_SECRET, {
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "1d",
     });
 
-    user = {
+    const safeUser = {
       _id: user._id,
       fullname: user.fullname,
       email: user.email,
@@ -341,13 +355,13 @@ export const login = async (req, res) => {
         sameSite: "Strict",
       })
       .json({
-        message: `Welcome back ${user.fullname}`,
-        user,
+        message: `Welcome back ${safeUser.fullname}`,
+        user: safeUser,
         success: true,
       });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
+    console.error("Login error:", error.message);
+    return res.status(500).json({
       message: "Server Error login failed",
       success: false,
     });
@@ -356,84 +370,55 @@ export const login = async (req, res) => {
 
 export const logout = async (req, res) => {
   try {
-      return res.status(200).cookie("token", "", { maxAge: 0 }).json({
-          message: "Logged out successfully.",
-          success: true
-      })
+    return res.status(200).cookie("token", "", { maxAge: 0 }).json({
+      message: "Logged out successfully.",
+      success: true,
+    });
   } catch (error) {
-      console.log(error);
+    console.error("Logout error:", error.message);
+    return res.status(500).json({ message: "Server Error", success: false });
   }
-}
-
-
-
+};
 
 export const updateProfile = async (req, res) => {
   try {
-    console.log('Uploaded file:', req.file);
-    console.log('Request body:', req.body);
-
-    const { fullname, email, phoneNumber, bio, skills, resume } = req.body;  
+    const { fullname, email, phoneNumber, bio, skills, resume } = req.body;
     const file = req.file;
 
-    // Check if file is uploaded
-    
-
-    //cloudinary upload if file exists
     let cloudResponse;
     if (file) {
-      const fileUri = getDataUri(file);
-      cloudResponse = await cloudinary.uploader.upload(fileUri.content);
+      try {
+        const fileUri = getDataUri(file);
+        cloudResponse = await cloudinary.uploader.upload(fileUri.content);
+      } catch (uploadError) {
+        console.error("Cloudinary upload failed:", uploadError.message);
+        return res.status(500).json({
+          message: "Failed to upload profile photo. Please try again.",
+          success: false,
+        });
+      }
     }
-    
 
-    // Initialize userId at the beginning
-    const userId = req.id; // middleware authentication
-
-    // Check if userId is valid
+    const userId = req.id;
     let user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
-        message: "User  not found",
+        message: "User not found",
         success: false,
       });
     }
 
-    // Process skills if provided
-    let skillsArray;
-    if (skills) {
-      skillsArray = skills.split(",");
-    }
+    if (fullname)     user.fullname          = fullname;
+    if (email)        user.email             = email;
+    if (phoneNumber)  user.phoneNumber       = phoneNumber;
+    if (bio)          user.profile.bio       = bio;
+    if (skills)       user.profile.skills    = skills.split(",").map((s) => s.trim());
+    if (resume)       user.profile.resume    = resume;
+    if (cloudResponse) user.profile.profilePhoto = cloudResponse.secure_url;
 
-    // Update user profile
-    if (fullname) {
-      user.fullname = fullname;
-    }
-    if (email) {
-      user.email = email;
-    }
-    if (phoneNumber) {
-      user.phoneNumber = phoneNumber;
-    }
-    if (bio) {
-      user.profile.bio = bio;
-    }
-    if (skills) {
-      user.profile.skills = skillsArray;
-    }
-    if (resume) {
-      user.profile.resume = resume;
-    }
-    
-    //profile photo
-    if (cloudResponse) {
-      user.profile.profilePhoto = cloudResponse.secure_url;
-    }
-
-    // Save updated user
     await user.save();
 
-    user = {
+    const safeUser = {
       _id: user._id,
       fullname: user.fullname,
       email: user.email,
@@ -444,12 +429,12 @@ export const updateProfile = async (req, res) => {
 
     return res.status(200).json({
       message: "Profile updated successfully",
-      user,
+      user: safeUser,
       success: true,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
+    console.error("UpdateProfile error:", error.message);
+    return res.status(500).json({
       message: "Server Error updating profile",
       success: false,
     });
