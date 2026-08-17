@@ -53,6 +53,21 @@ app.get('/health', (_req, res) => {
   });
 });
 
+
+// ── SMTP connection test (remove after debugging) ─────────────────────────────
+app.get('/test-smtp', async (_req, res) => {
+  try {
+    const nodemailer = (await import('nodemailer')).default;
+    const user = process.env.EMAIL_USER;
+    const pass = process.env.EMAIL_PASS;
+    const t = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } });
+    await t.verify();
+    res.json({ ok: true, user, passLength: pass.length });
+  } catch(e) {
+    res.json({ ok: false, error: e.message, code: e.code });
+  }
+});
+
 // Health check
 app.get("/", (_req, res) => {
   res.json({ message: "Job-Hunt API is running.", docs: "/api-docs" });
