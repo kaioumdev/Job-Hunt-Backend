@@ -39,6 +39,20 @@ app.use(cors(corsOptions));
 // ── API Documentation ─────────────────────────────────────────────────────────
 setupSwagger(app);
 
+
+// ── Env diagnostics (safe — shows SET/MISSING only, never values) ─────────────
+app.get('/health', (_req, res) => {
+  const required = ['MONGO_URI','JWT_SECRET','EMAIL_USER','EMAIL_PASS','CLOUD_NAME','CLOUD_API','API_SECRET'];
+  const optional = ['AI_BASE_URL','AI_API_KEY','AI_MODEL','NODE_ENV'];
+  const check = (keys) => Object.fromEntries(keys.map(k => [k, process.env[k] ? 'SET' : 'MISSING']));
+  res.json({
+    status: 'ok',
+    node_env: process.env.NODE_ENV || 'undefined',
+    required: check(required),
+    optional: check(optional),
+  });
+});
+
 // Health check
 app.get("/", (_req, res) => {
   res.json({ message: "Job-Hunt API is running.", docs: "/api-docs" });
