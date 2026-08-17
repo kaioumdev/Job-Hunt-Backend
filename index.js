@@ -68,6 +68,42 @@ app.get('/test-smtp', async (_req, res) => {
   }
 });
 
+
+// ── Register flow debug (remove after fix confirmed) ──────────────────────────
+app.post('/test-register', async (req, res) => {
+  try {
+    const { User } = await import('./models/user.model.js');
+    const bcrypt = (await import('bcryptjs')).default;
+    const { sendOtpEmail } = await import('./utils/mailer.js');
+
+    const { fullname='Test User', email='test@devtest.dev', phoneNumber='01999000000', password='test123', role='Student' } = req.body;
+
+    // Step-by-step with individual try/catch to pinpoint failure
+    let step = 'findEmail';
+    const existing = await User.findOne({ email });
+    if (existing) return res.json({ ok: false, step, detail: 'email exists' });
+
+    step = 'hashPassword';
+    const hash = await bcrypt.hash(password, 10);
+
+    step = 'createUser';
+    const otp = '123456';
+    const u = new User({ fullname, email, phoneNumber, password: hash, role, isVerified: false, otp, otpExpiry: new Date(Date.now() + 600000) });
+
+    step = 'saveUser';
+    await u.save();
+
+    step = 'sendEmail';
+    await sendOtpEmail(email, otp);
+
+    // cleanup
+    await User.deleteOne({ _id: u._id });
+    res.json({ ok: true, message: 'All steps passed' });
+  } catch(e) {
+    res.json({ ok: false, step: 'unknown', error: e.message, code: e.code, kind: e.name });
+  }
+});
+
 // Health check
 app.get("/", (_req, res) => {
   res.json({ message: "Job-Hunt API is running.", docs: "/api-docs" });
